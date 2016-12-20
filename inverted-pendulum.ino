@@ -16,35 +16,6 @@
 #define DIR_PIN 12
 #define CART_RESET_PIN 21
 
-// Command callbacks for use by SimpleShell
-ExecStatus setPID(CommandLine *clp)
-{
-  Serial.print("setPID ");
-  for (int i=0; i<clp->argc; i++)
-  {
-    Serial.print(" ");
-    Serial.print(clp->argv[i]);
-    // TODO: add cartPid.setPID(kp, ki, kd);
-  }
-  Serial.println();
-  return SUCCESS;
-}
-
-ExecStatus setSetpoint(CommandLine *clp)
-{
-  Serial.print("setSetpoint ");
-  for (int i=0; i<clp->argc; i++)
-  {
-    Serial.print(" ");
-    Serial.print(clp->argv[i]);
-    // TODO: add something like this:
-    // float setpoint = cmd.toFloat()/xMax;
-    // cartPid.setpoint = constrain(setpoint, cartPid.minOutput, cartPid.maxOutput);
-  }
-  Serial.println();
-  return SUCCESS;
-}
-
 float prevSetpoint = 0; // temp - debug
 
 // For incoming serial data
@@ -62,20 +33,80 @@ float maxPwm = 16383;  // 100% PWM value with 14-bit resolution
 float pwmFreq = 2929.687; // See http://www.pjrc.com/teensy/td_pulse.html
 float dutyCycle = 0;  // Percent
 
-unsigned long timeStep = 15; // ms
-
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // PID control for cart position
-float kp = 2, ki = 10, kd = 0;
-elapsedMillis pidTimer = 0;
+float kp = 2, ki = 10, kd = 0; // Initial/default PID gain coeffs
+unsigned long timeStep = 15; // ms
 PIDControl cartPid(kp, ki, kd, 0, timeStep);
+elapsedMillis pidTimer = 0;
+
+// Command callbacks for use by SimpleShell
+ExecStatus setPID(CommandLine *cl)
+{
+  if (cl->argc != 3)
+  {
+    Serial.print("setPID: expected 3 args (kp, ki, kd), got ");
+    Serial.println(cl->argc);
+    return FAILED;
+  }
+
+  float pidGains[3] = {0};
+  for (int i=0; i<3; i++)
+  {
+    Serial.print(" ");
+    Serial.print(cl->argv[i]);
+
+    // atof returns 0.0 on failure, which is a pretty decent fallback here
+    pidGains[i] = atof(cl->argv[i]);
+
+    // Gains should all be non-negative
+    if (pidGains[i] < 0)
+    {
+      Serial.print("setPID: received negative gain coefficient: ");
+      Serial.println(pidGains[i]);
+      return FAILED;
+    }
+  }
+
+  cartPid.setPID(pidGains[0], pidGains[1], pidGains[2]);
+
+  Serial.println();
+  return SUCCESS;
+}
+
+// Expected setpoint is a percentage from -100 (max left) to +100 (max right)
+// The actual setpoint is in -1 to 1, but percentages are used for convenience.
+ExecStatus setSetpoint(CommandLine *cl)
+{
+  if (cl->argc != 1)
+  {
+    Serial.print("setSetpoint: expected 1 arg, got ");
+    Serial.println(cl->argc);
+    return FAILED;
+  }
+
+  // atof returns 0.0 on failure (the center), which is a good fallback here
+  float setpoint = atof(cl->argv[0]);
+
+  if (setpoint < -100 || setpoint > +100)
+  {
+    Serial.print("setSetpoint: valid range is [-100,+100], got ");
+    Serial.println(setpoint);
+    return FAILED;
+  }
+
+  cartPid.setpoint = setpoint/100;
+
+  Serial.println();
+  return SUCCESS;
+}
 
 /**
  * Find limits using bump switches and center cart between them.
  */
-ExecStatus reset(CommandLine *clp)
+ExecStatus reset(CommandLine *cl)
 {
   elapsedMillis resetTimer = 0;
   unsigned long maxTime = 5000;
@@ -272,7 +303,7 @@ void loop()
 
   if (pidTimer >= timeStep)
   {
-    if (prevSetpoint != cartPid.setpoint) printStatus(cartPid);
+    if (prevSetpoint != cartPid.setpoint) { printStatus(cartPid); }
     pidTimer -= timeStep;
     float input = float(trackEncoder.read())/xMax;
     cartPid.update(input, 0.001);
