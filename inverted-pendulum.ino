@@ -183,54 +183,6 @@ void printStatus(PIDControl &pid)
   Serial.println(s);
 }
 
-void handleByte(byte b)
-{
-  Serial.print((char)b);
-
-  if (b == '-')
-    cmd = "-";
-
-  // kp
-  else if (b == 'p') // increase kp
-    kp += 0.01;
-  else if (b == 'l') // decrease kp
-    kp -= 0.01;
-
-  // ki
-  else if (b == 'i') // increase ki
-    ki += 0.1;
-  else if (b == 'k') // decrease ki
-    ki -= 0.1;
-
-  // kd
-  else if (b == 'd') // increase kd
-    kd += 0.001;
-  else if (b == 'c') // decrease kd
-    kd -= 0.001;
-
-  else if (b == '.')
-    cmd += b;
-  else if (isDigit(b))
-  {
-    byte digit = b - 48;
-    cmd += digit;
-  }
-  else if (b == '\r' || b == '\n')
-  {
-    // Assume here that cmd is a signed track x setpoint value in encoder units.
-    // Convert to a fraction in [-1,1] for PID input
-    float setpoint = cmd.toFloat()/xMax;
-    cartPid.setpoint = constrain(setpoint, cartPid.minOutput, cartPid.maxOutput);
-    cmd = "";
-  }
-  else
-  {
-    cartPid.setPID(kp, ki, kd);
-    Serial.println();
-    printStatus(cartPid);
-  }
-}
-
 // string -> callback "dictionary"
 Command cmdlist[] =
 {
