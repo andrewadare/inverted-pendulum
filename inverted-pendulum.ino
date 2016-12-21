@@ -37,7 +37,7 @@ Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // PID control for cart position
-float kp = 2, ki = 10, kd = 0; // Initial/default PID gain coeffs
+float kp = 2, ki = 200, kd = 0; // Initial/default PID gain coeffs
 unsigned long timeStep = 20; // ms
 PIDControl cartPid(kp, ki, kd, 0, timeStep);
 elapsedMillis pidTimer = 0;
@@ -72,7 +72,6 @@ ExecStatus setPID(CommandLine *cl)
 
   cartPid.setPID(pidGains[0], pidGains[1], pidGains[2]);
 
-  Serial.println();
   return SUCCESS;
 }
 
@@ -99,7 +98,6 @@ ExecStatus setSetpoint(CommandLine *cl)
 
   cartPid.setpoint = setpoint/100;
 
-  Serial.println();
   return SUCCESS;
 }
 
@@ -112,7 +110,7 @@ ExecStatus reset(CommandLine *cl)
   unsigned long maxTime = 5000;
 
   digitalWrite(DIR_PIN, LEFT);
-  analogWrite(PWM_PIN, 0.3*maxPwm);
+  analogWrite(PWM_PIN, 0.35*maxPwm);
 
   while (true)
   {
@@ -145,7 +143,7 @@ ExecStatus reset(CommandLine *cl)
       break;
     }
   }
-  Serial.print("Found right limit.\r\nLimits = +/-");
+  Serial.print("Found right limit. Limits = +/-");
   Serial.println(xMax);
 
   resetTimer = 0;
@@ -248,8 +246,14 @@ void setup()
   // Don't continue until a terminal is connected. Useful for development.
   while (!Serial) {;}
 
+  Serial.println("Initializing...");
+  delay(1000);
+
   char cmd[] = "reset";
   shell.executeCommand(cmd);
+
+  Serial.println("Entering loop");
+  delay(1000);
 }
 
 void loop()

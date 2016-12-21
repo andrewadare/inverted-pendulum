@@ -51,23 +51,29 @@ function rtplot(times, setpoints, positions)
     gui()
 end
 
-function process_mcu_stream(mcu, times, setpoints, positions)
-    datadict = readmcu(mcu)
-    updated = bump_queues(datadict, times, setpoints, positions)
-    if updated && times[end] > 25
-        rtplot(times, setpoints, positions)
+let counter = 0
+    global process_mcu_stream
+    function process_mcu_stream(mcu, times, setpoints, positions)
+        datadict = readmcu(mcu)
+        bump_queues(datadict, times, setpoints, positions) || return
+        counter += 1
+        if times[end] > 30 && counter > 5
+            rtplot(times, setpoints, positions)
+            counter = 0
+        end
     end
 end
 
 function main()
 
     # Number of points to display
-    const N = 500
+    const N = 1000
     const address = length(ARGS) == 1 ? ARGS[1] : "/dev/cu.usbmodem2370891"
-    times, setpoints, positions = zeros(N), zeros(N), zeros(N)
+    times, setpoints, positions = collect(linspace(0,30,N)), zeros(N), zeros(N)
 
     println("Opening plot window...")
     rtplot(times, setpoints, positions)
+    sleep(3)
 
     println("Connecting to MCU...")
     mcu = open(address, 115200)
@@ -83,7 +89,7 @@ function main()
             process_mcu_stream(mcu, times, setpoints, positions)
         end
         # Give the queued tasks a chance to run
-        sleep(0.001)
+        sleep(0.0001)
     end
 end
 
