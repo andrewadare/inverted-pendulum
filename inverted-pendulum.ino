@@ -16,7 +16,7 @@
 #define DIR_PIN 12
 #define CART_RESET_PIN 21
 
-float prevSetpoint = 0; // temp - debug
+// float prevSetpoint = 0; // temp - debug
 
 // For incoming serial data
 int incomingByte = 0;
@@ -38,7 +38,7 @@ Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // PID control for cart position
 float kp = 2, ki = 10, kd = 0; // Initial/default PID gain coeffs
-unsigned long timeStep = 15; // ms
+unsigned long timeStep = 20; // ms
 PIDControl cartPid(kp, ki, kd, 0, timeStep);
 elapsedMillis pidTimer = 0;
 
@@ -175,11 +175,14 @@ ExecStatus reset(CommandLine *cl)
 
 void printStatus(PIDControl &pid)
 {
-  String s = String("kp,ki,kd: ") + kp + ", " + ki + ", " + kd
-             + String("; p,i,d: ") + pid.kp + ", " + pid.ki + ", " + pid.kd
-             + String(" setpoint: ") + pid.setpoint
-             + String(" output: ") + pid.output
-             + String(" pwm: ") + dutyCycle;
+  String s = String("{\"pid\":[") + pid.kp + "," + pid.ki + "," + pid.kd + "]"
+             + String(", \"setpoint\":") + (100*pid.setpoint)
+             + String(", \"output\":") + pid.output
+             + String(", \"pwm\":") + dutyCycle
+             + String(", \"x\":") + (100*float(trackEncoder.read())/xMax)
+             + String(", \"theta\":") + thetaEncoder.read()
+             + String(", \"time\":") + millis()
+             + "}";
   Serial.println(s);
 }
 
@@ -255,13 +258,15 @@ void loop()
 
   if (pidTimer >= timeStep)
   {
-    if (prevSetpoint != cartPid.setpoint) { printStatus(cartPid); }
+    // if (prevSetpoint != cartPid.setpoint) { printStatus(cartPid); }
     pidTimer -= timeStep;
     float input = float(trackEncoder.read())/xMax;
     cartPid.update(input, 0.001);
     digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
     analogWrite(PWM_PIN, (fabs(cartPid.output) + 0.1)*maxPwm);
-    prevSetpoint = cartPid.setpoint;
+    // prevSetpoint = cartPid.setpoint;
+
+    printStatus(cartPid);
   }
 }
 
