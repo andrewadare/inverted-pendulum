@@ -16,16 +16,21 @@
 #define DIR_PIN 12
 #define CART_RESET_PIN 21
 
+const float pi = 3.14159265358979;
+
 elapsedMillis riseTimer = 0;
 bool riseTimerStarted = false;
 float deltaSetpoint = 0;
 
+
+// TODO: make a Pendulum struct or class instead of all these state globals
 int xPrev = 0;
 int xCart = 0;
 int xMax = 0;
 
-int thetaPrev = 0;
-int theta = 0;
+float theta = 0;
+float thetaPrev = 0;
+float omega = 0; // angular velocity
 
 float maxPwm = 16383;  // 100% PWM value with 14-bit resolution
 float pwmFreq = 2929.687; // See http://www.pjrc.com/teensy/td_pulse.html
@@ -39,6 +44,14 @@ float kp = 2, ki = 200, kd = 0; // Initial/default PID gain coeffs
 PIDControl cartPid(kp, ki, kd, 0, 10); // p,i,d, initial setpoint, timestep [ms]
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
+
+void swingUp()
+{
+  thetaPrev = theta;
+  theta = thetaEncoder.read();
+  float amplitude = theta > 0 ? 0.5 : -0.5;
+  cartPid.setpoint = amplitude*cos(theta/300*pi);
+}
 
 // Command callbacks for use by SimpleShell
 ExecStatus setPID(CommandLine *cl)
@@ -260,6 +273,8 @@ void setup()
 void loop()
 {
   handleCommands();
+
+  // swingUp(); // Dangerous and exciting
 
   // Compute PID output.
   cartPid.update(float(trackEncoder.read())/xMax);
