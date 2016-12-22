@@ -17,7 +17,7 @@ function readmcu(mcu::SerialPort)
         catch
             println("skipping $msg")
         end
-    else
+    elseif length(msg) > 0
         println(msg) # Pass through non-data messages
     end
     return datadict
@@ -51,13 +51,19 @@ function rtplot(times, setpoints, positions)
     gui()
 end
 
-let counter = 0
+let
+    # Local closure variables
+    counter, nskip = 0, 0
+
     global process_mcu_stream
+
     function process_mcu_stream(mcu, times, setpoints, positions)
         datadict = readmcu(mcu)
         bump_queues(datadict, times, setpoints, positions) || return
         counter += 1
-        if times[end] > 30 && counter > 5
+        t = times[end]
+        nskip = t < 20 ? 50 : t < 30 ? 25 : t < 50 ? 10 : 2
+        if times[end] > 30 && counter > nskip
             rtplot(times, setpoints, positions)
             counter = 0
         end

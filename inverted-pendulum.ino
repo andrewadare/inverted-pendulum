@@ -16,11 +16,9 @@
 #define DIR_PIN 12
 #define CART_RESET_PIN 21
 
-// float prevSetpoint = 0; // temp - debug
-
-// For incoming serial data
-int incomingByte = 0;
-String cmd = "";
+elapsedMillis riseTimer = 0;
+bool riseTimerStarted = false;
+float deltaSetpoint = 0;
 
 int xPrev = 0;
 int xCart = 0;
@@ -96,7 +94,10 @@ ExecStatus setSetpoint(CommandLine *cl)
     return FAILED;
   }
 
+  deltaSetpoint = setpoint/100 - cartPid.setpoint;
   cartPid.setpoint = setpoint/100;
+  riseTimer = 0;
+  riseTimerStarted = true;
 
   return SUCCESS;
 }
@@ -177,9 +178,9 @@ void printStatus(PIDControl &pid)
              + String(", \"setpoint\":") + (100*pid.setpoint)
              + String(", \"output\":") + pid.output
              + String(", \"pwm\":") + dutyCycle
-             + String(", \"x\":") + (100*float(trackEncoder.read())/xMax)
+             + String(", \"x\":") + (100*pid.prevInput)
              + String(", \"theta\":") + thetaEncoder.read()
-             + String(", \"time\":") + millis()
+             + String(", \"time\":") + pid.prevTime
              + "}";
   Serial.println(s);
 }
@@ -260,16 +261,31 @@ void loop()
 {
   handleCommands();
 
+  // Compute PID output.
+  cartPid.update(float(trackEncoder.read())/xMax);
+
+  // Report rise time
+  if (riseTimerStarted && deltaSetpoint != 0)
+  {
+    if (fabs((cartPid.setpoint - cartPid.prevInput)/deltaSetpoint) < 0.05)
+    {
+      Serial.print("rise time: ");
+      Serial.println(riseTimer);
+      riseTimerStarted = false;
+    }
+  }
+
+  // Set motor direction
+  digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
+
+  // Set motor PWM value. Include a deadband to suppress jitter
+  float op = fabs(cartPid.output);
+  float pwmSetting = op < 0.01 ? 0 : (op + 0.1)*maxPwm;
+  analogWrite(PWM_PIN, pwmSetting);
+
   if (pidTimer >= timeStep)
   {
-    // if (prevSetpoint != cartPid.setpoint) { printStatus(cartPid); }
     pidTimer -= timeStep;
-    float input = float(trackEncoder.read())/xMax;
-    cartPid.update(input, 0.001);
-    digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
-    analogWrite(PWM_PIN, (fabs(cartPid.output) + 0.1)*maxPwm);
-    // prevSetpoint = cartPid.setpoint;
-
     printStatus(cartPid);
   }
 }
