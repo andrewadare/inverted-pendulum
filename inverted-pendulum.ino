@@ -36,9 +36,9 @@ Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // PID control for cart position
 float kp = 2, ki = 200, kd = 0; // Initial/default PID gain coeffs
-unsigned long timeStep = 20; // ms
-PIDControl cartPid(kp, ki, kd, 0, timeStep);
-elapsedMillis pidTimer = 0;
+PIDControl cartPid(kp, ki, kd, 0, 10); // p,i,d, initial setpoint, timestep [ms]
+elapsedMillis printTimer = 0;
+unsigned int printerval = 50; // ms
 
 // Command callbacks for use by SimpleShell
 ExecStatus setPID(CommandLine *cl)
@@ -283,9 +283,9 @@ void loop()
   float pwmSetting = op < 0.01 ? 0 : (op + 0.1)*maxPwm;
   analogWrite(PWM_PIN, pwmSetting);
 
-  if (pidTimer >= timeStep)
+  if (printTimer >= printerval)
   {
-    pidTimer -= timeStep;
+    printTimer -= printerval;
     printStatus(cartPid);
   }
 }
