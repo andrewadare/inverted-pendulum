@@ -52,20 +52,15 @@ function rtplot(times, setpoints, positions)
 end
 
 let
-    # Local closure variables
-    counter, nskip = 0, 0
-
+    counter = 0
     global process_mcu_stream
 
     function process_mcu_stream(mcu, times, setpoints, positions)
         datadict = readmcu(mcu)
-        bump_queues(datadict, times, setpoints, positions) || return
         counter += 1
-        t = times[end]
-        nskip = t < 20 ? 50 : t < 30 ? 25 : t < 50 ? 10 : 2
-        if times[end] > 30 && counter > nskip
+        if counter > 100
+            bump_queues(datadict, times, setpoints, positions) || return
             rtplot(times, setpoints, positions)
-            counter = 0
         end
     end
 end
@@ -75,7 +70,7 @@ function main()
     # Number of points to display
     const N = 1000
     const address = length(ARGS) == 1 ? ARGS[1] : "/dev/cu.usbmodem2370891"
-    times, setpoints, positions = collect(linspace(0,30,N)), zeros(N), zeros(N)
+    times, setpoints, positions = collect(linspace(0,10,N)), zeros(N), zeros(N)
 
     println("Opening plot window...")
     rtplot(times, setpoints, positions)
