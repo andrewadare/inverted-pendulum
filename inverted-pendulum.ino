@@ -1,6 +1,7 @@
 // Inverted pendulum - for Teensy 3.2
 
 #include "Encoder.h"
+#include "Pendulum.h"
 #include "PIDControl.h"
 #include "SimpleShell.h"
 
@@ -16,21 +17,9 @@
 #define DIR_PIN 12
 #define CART_RESET_PIN 21
 
-const float pi = 3.14159265358979;
-
 elapsedMillis riseTimer = 0;
 bool riseTimerStarted = false;
 float deltaSetpoint = 0;
-
-
-// TODO: make a Pendulum struct or class instead of all these state globals
-int xPrev = 0;
-int xCart = 0;
-int xMax = 0;
-
-float theta = 0;
-float thetaPrev = 0;
-float omega = 0; // angular velocity
 
 float maxPwm = 16383;  // 100% PWM value with 14-bit resolution
 float pwmFreq = 2929.687; // See http://www.pjrc.com/teensy/td_pulse.html
@@ -39,19 +28,14 @@ float dutyCycle = 0;  // Percent
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
+// Initialize with ticks in pendulum encoder wheel, and limit in degrees for swing-up
+Pendulum pendulum(1200, 100.0);
+
 // PID control for cart position
 float kp = 2, ki = 200, kd = 0; // Initial/default PID gain coeffs
 PIDControl cartPid(kp, ki, kd, 0, 10); // p,i,d, initial setpoint, timestep [ms]
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
-
-void swingUp()
-{
-  thetaPrev = theta;
-  theta = thetaEncoder.read();
-  float amplitude = theta > 0 ? 0.5 : -0.5;
-  cartPid.setpoint = amplitude*cos(theta/300*pi);
-}
 
 // Command callbacks for use by SimpleShell
 ExecStatus setPID(CommandLine *cl)
@@ -152,33 +136,33 @@ ExecStatus reset(CommandLine *cl)
     }
     if (digitalRead(RIGHT_BUMP_PIN) == LOW)
     {
-      xMax = trackEncoder.read()/2;
-      trackEncoder.write(xMax);
+      pendulum.xEncMax = trackEncoder.read()/2;
+      trackEncoder.write(pendulum.xEncMax);
       break;
     }
   }
   Serial.print("Found right limit. Limits = +/-");
-  Serial.println(xMax);
+  Serial.println(pendulum.xEncMax);
 
   resetTimer = 0;
-  xCart = trackEncoder.read();
-  while (abs(xCart) > 2)
+  pendulum.setX(trackEncoder.read());
+  while (abs(pendulum.xEnc) > 2)
   {
     if (resetTimer > maxTime)
     {
       Serial.println("Reset timeout");
       return FAILED;
     }
-    digitalWrite(DIR_PIN, xCart > 0 ? LEFT : RIGHT);
-    analogWrite(PWM_PIN, (float(xCart)/xMax + 0.15)*maxPwm);
+    digitalWrite(DIR_PIN, pendulum.x > 0 ? LEFT : RIGHT);
+    analogWrite(PWM_PIN, (pendulum.x + 0.15)*maxPwm);
     delay(10);
-    xCart = trackEncoder.read();
+    pendulum.setX(trackEncoder.read());
   }
 
   analogWrite(PWM_PIN, 0);
 
   Serial.print("Cart position: ");
-  Serial.println(xCart);
+  Serial.println(pendulum.xEnc);
 
   cartPid.setpoint = 0;
 
@@ -274,10 +258,14 @@ void loop()
 {
   handleCommands();
 
-  // swingUp(); // Dangerous and exciting
-
-  // Compute PID output.
-  cartPid.update(float(trackEncoder.read())/xMax);
+  // Update pendulum state and compute PID output
+  pendulum.setX(trackEncoder.read());
+  // TODO: read theta here; set pendulum theta in degrees
+  if (fabs(pendulum.theta) < pendulum.swingThetaMax)
+  {
+    cartPid.setpoint = pendulum.swingX(0.5);
+  }
+  cartPid.update(pendulum.x);
 
   // Report rise time
   if (riseTimerStarted && deltaSetpoint != 0)
