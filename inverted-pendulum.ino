@@ -32,7 +32,7 @@ Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 Pendulum pendulum(1200, 100.0);
 
 // PID control for cart position
-float kp = 2, ki = 200, kd = 0; // Initial/default PID gain coeffs
+float kp = 2, ki = 0.2, kd = 0; // Initial/default PID gain coeffs
 PIDControl cartPid(kp, ki, kd, 0, 10); // p,i,d, initial setpoint, timestep [ms]
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
@@ -265,7 +265,7 @@ void loop()
   {
     cartPid.setpoint = pendulum.swingX(0.5);
   }
-  cartPid.update(pendulum.x);
+  cartPid.update(pendulum.x, millis());
 
   // Report rise time
   if (riseTimerStarted && deltaSetpoint != 0)
