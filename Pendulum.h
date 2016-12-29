@@ -7,7 +7,7 @@ public:
   Pendulum(int thetaEncoderMax, float swingMaxDegrees);
   ~Pendulum() {}
 
-  void setX(const int xEncoder);
+  void update(const int xEncoder, const int thetaEncoder);
 
   float swingX(const float amplitude);
 
@@ -17,7 +17,7 @@ public:
   int thetaEnc;
   int thetaEncMax;
   float theta;
-  float thetaPrev;
+  int thetaEncPrev;
   float swingThetaMax;
   float omega;
 };
