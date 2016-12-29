@@ -145,7 +145,7 @@ ExecStatus reset(CommandLine *cl)
   Serial.println(pendulum.xEncMax);
 
   resetTimer = 0;
-  pendulum.setX(trackEncoder.read());
+  pendulum.update(trackEncoder.read(), thetaEncoder.read());
   while (abs(pendulum.xEnc) > 2)
   {
     if (resetTimer > maxTime)
@@ -156,7 +156,7 @@ ExecStatus reset(CommandLine *cl)
     digitalWrite(DIR_PIN, pendulum.x > 0 ? LEFT : RIGHT);
     analogWrite(PWM_PIN, (pendulum.x + 0.15)*maxPwm);
     delay(10);
-    pendulum.setX(trackEncoder.read());
+    pendulum.update(trackEncoder.read(), thetaEncoder.read());
   }
 
   analogWrite(PWM_PIN, 0);
@@ -258,13 +258,13 @@ void loop()
 {
   handleCommands();
 
-  // Update pendulum state and compute PID output
-  pendulum.setX(trackEncoder.read());
-  // TODO: read theta here; set pendulum theta in degrees
-  if (fabs(pendulum.theta) < pendulum.swingThetaMax)
-  {
-    cartPid.setpoint = pendulum.swingX(0.5);
-  }
+  // Update pendulum state
+  pendulum.update(trackEncoder.read(), thetaEncoder.read());
+
+  // If pendulum is not inverted, generate setpoint for swinging action
+  cartPid.setpoint = pendulum.swingX(0.5);
+
+  // Compute PID output for x position
   cartPid.update(pendulum.x, millis());
 
   // Report rise time
