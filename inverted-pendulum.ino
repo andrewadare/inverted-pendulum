@@ -28,11 +28,11 @@ float dutyCycle = 0;  // Percent
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
-// Initialize with ticks in pendulum encoder wheel, and limit in degrees for swing-up
-Pendulum pendulum(1200, 100.0);
+// Initialize with encoder period and swing-up limit
+Pendulum pendulum(7200 /* counts/rev */, 100.0 /* deg */);
 
 // PID control for cart position
-float kp = 2, ki = 0.2, kd = 0; // Initial/default PID gain coeffs
+float kp = 2, ki = 0.001, kd = 0; // Initial/default PID gain coeffs
 PIDControl cartPid(kp, ki, kd, 0, 10); // p,i,d, initial setpoint, timestep [ms]
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
@@ -169,14 +169,15 @@ ExecStatus reset(CommandLine *cl)
   return SUCCESS;
 }
 
-void printStatus(PIDControl &pid)
+void printStatus(PIDControl &pid, Pendulum &pen)
 {
   String s = String("{\"pid\":[") + pid.kp + "," + pid.ki + "," + pid.kd + "]"
              + String(", \"setpoint\":") + (100*pid.setpoint)
-             + String(", \"output\":") + pid.output
+             + String(", \"output\":") + (100*pid.output)
              + String(", \"pwm\":") + dutyCycle
-             + String(", \"x\":") + (100*pid.prevInput)
-             + String(", \"theta\":") + thetaEncoder.read()
+             + String(", \"x\":") + (100*pen.x)
+             + String(", \"theta\":") + pen.theta
+             + String(", \"omega\":") + pen.omega
              + String(", \"time\":") + pid.prevTime
              + "}";
   Serial.println(s);
@@ -262,7 +263,7 @@ void loop()
   pendulum.update(trackEncoder.read(), thetaEncoder.read());
 
   // If pendulum is not inverted, generate setpoint for swinging action
-  cartPid.setpoint = pendulum.swingX(0.5);
+  // cartPid.setpoint = pendulum.swingX(0.5);
 
   // Compute PID output for x position
   cartPid.update(pendulum.x, millis());
@@ -281,15 +282,16 @@ void loop()
   // Set motor direction
   digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
 
-  // Set motor PWM value. Include a deadband to suppress jitter
-  float op = fabs(cartPid.output);
-  float pwmSetting = op < 0.01 ? 0 : (op + 0.1)*maxPwm;
-  analogWrite(PWM_PIN, pwmSetting);
+  // Set motor PWM value. Include a 1% output deadband to suppress jitter
+  float percent_output = 100*fabs(cartPid.output);
+  dutyCycle = percent_output < 1 ? 0 : (percent_output + 10);
+  dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
+  analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
 
   if (printTimer >= printerval)
   {
     printTimer -= printerval;
-    printStatus(cartPid);
+    printStatus(cartPid, pendulum);
   }
 }
 
