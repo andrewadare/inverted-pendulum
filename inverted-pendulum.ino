@@ -263,7 +263,7 @@ void loop()
   pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
 
   // If pendulum is not inverted, generate setpoint for swinging action
-  // cartPid.setpoint = pendulum.swingX(0.5);
+  cartPid.setpoint = pendulum.swingX(0.25);
 
   // Compute PID output for x position
   cartPid.update(pendulum.x, millis());

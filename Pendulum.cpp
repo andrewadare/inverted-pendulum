@@ -42,10 +42,14 @@ void Pendulum::update(const int xEncoder, const int thetaEncoder, unsigned long 
 
 float Pendulum::swingX(const float amplitude)
 {
-  if (theta > 0 && theta < swingThetaMax && omega < 0)
+  // left, swinging right
+  if (theta < swingThetaMax && omega < 0)
     return amplitude*cos(theta/swingThetaMax*M_PI);
-  else if (theta < 0 && theta > -swingThetaMax && omega > 0)
+
+  // right, swinging left
+  else if (theta > 360 - swingThetaMax && omega > 0)
     return -amplitude*cos(theta/swingThetaMax*M_PI);
+
   else
     return x;
 }
