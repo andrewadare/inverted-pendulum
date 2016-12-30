@@ -17,9 +17,13 @@
 #define DIR_PIN 12
 #define CART_RESET_PIN 21
 
+// #define DEBUG 1 // Uncomment to print info for study/debugging
+
+#ifdef DEBUG
 elapsedMillis riseTimer = 0;
 bool riseTimerStarted = false;
 float deltaSetpoint = 0;
+#endif
 
 float maxPwm = 16383;  // 100% PWM value with 14-bit resolution
 float pwmFreq = 2929.687; // See http://www.pjrc.com/teensy/td_pulse.html
@@ -28,12 +32,15 @@ float dutyCycle = 0;  // Percent
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
-// Initialize with encoder period and swing-up limit
+// Initialize with encoder period and swing-up limit.
+// Theta is positive clockwise in degrees, with theta = 0 when hanging at rest.
 Pendulum pendulum(7200 /* counts/rev */, 120.0 /* deg */);
 
-// PID control for cart position
-float kp = 2, ki = 0.0005, kd = 0; // Initial/default PID gain coeffs
-PIDControl cartPid(kp, ki, kd, 0, 5); // p,i,d, initial setpoint, timestep [ms]
+// PID controllers for pendulum and cart.
+// Parameters: p,i,d, initial setpoint, timestep [ms]
+PIDControl penPid(0.75, 0.0002, 75.0, 180.0, 10);
+PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
+
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
 
@@ -91,10 +98,13 @@ ExecStatus setSetpoint(CommandLine *cl)
     return FAILED;
   }
 
-  deltaSetpoint = setpoint/100 - cartPid.setpoint;
   cartPid.setpoint = setpoint/100;
+
+#ifdef DEBUG
+  deltaSetpoint = setpoint/100 - cartPid.setpoint;
   riseTimer = 0;
   riseTimerStarted = true;
+#endif
 
   return SUCCESS;
 }
@@ -236,9 +246,12 @@ void setup()
   // Reset pushbutton
   pinMode(CART_RESET_PIN, INPUT_PULLUP);
 
-  // Set output limits on cart PID controller.
+  // Set output limits on PID controllers.
   cartPid.minOutput = -1; // Full speed left
   cartPid.maxOutput = +1; // Full speed right
+
+  penPid.minOutput = -1; // Full speed left
+  penPid.maxOutput = +1; // Full speed right
 
   Serial.begin(115200);
 
@@ -262,12 +275,12 @@ void loop()
   // Update pendulum state
   pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
 
-  // If pendulum is not inverted, generate setpoint for swinging action
-  cartPid.setpoint = pendulum.swingX(0.4);
-
   // Compute PID output for x position
   cartPid.update(pendulum.x, millis());
 
+  penPid.update(pendulum.theta, millis());
+
+#ifdef DEBUG
   // Report rise time
   if (riseTimerStarted && deltaSetpoint != 0)
   {
@@ -278,22 +291,41 @@ void loop()
       riseTimerStarted = false;
     }
   }
-
-  // Set motor direction
-  digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
-
-  // Set motor PWM value. Include a 1% output deadband to suppress jitter
-  float percent_output = 100*fabs(cartPid.output);
-  dutyCycle = percent_output < 1 ? 0 : percent_output;
-  // dutyCycle = percent_output < 1 ? 0 : (percent_output + 10);
-  dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
-  analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+#endif
 
   if (printTimer >= printerval)
   {
     printTimer -= printerval;
     printStatus(cartPid, pendulum);
   }
+
+  // Inverted pendulum control actuation is active inside 180 +/- 18 degrees
+  if (fabs(penPid.setpoint - penPid.prevInput) < 18 && fabs(pendulum.omega) < 1)
+  {
+    // Set motor direction
+    digitalWrite(DIR_PIN, penPid.output > 0 ? LEFT : RIGHT);
+
+    // Set motor PWM value. Include a 1% output deadband to suppress jitter
+    float percent_output = 100*fabs(penPid.output);
+    dutyCycle = percent_output < 1 ? 0 : percent_output;
+    dutyCycle = penPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
+    analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+  }
+  else if (fabs(pendulum.omega) < 2)
+  {
+    // If pendulum is not inverted, generate setpoint for swinging action
+    cartPid.setpoint = pendulum.swingX(0.4);
+
+    // Set motor direction
+    digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
+
+    // Set motor PWM value. Include a 1% output deadband to suppress jitter
+    float percent_output = 100*fabs(cartPid.output);
+    dutyCycle = percent_output < 1 ? 0 : percent_output;
+    dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
+    analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+  }
+
 }
 
 // Bump switch ISRs
