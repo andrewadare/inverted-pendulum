@@ -10,20 +10,33 @@ thetaEncMax(thetaEncoderMax),
 theta(0),
 thetaEncPrev(0),
 swingThetaMax(swingMaxDegrees),
-omega(0)
+omega(0),
+dt(10)
 {
 }
 
-void Pendulum::update(const int xEncoder, const int thetaEncoder)
+void Pendulum::update(const int xEncoder, const int thetaEncoder, unsigned long currentTime)
 {
+  static unsigned long prevTime = 0;
+
+  // Return early if it's too soon for an update.
+  if (currentTime - prevTime < dt)
+  {
+    return;
+  }
+
   xEnc = xEncoder;
   x = xEncMax != 0 ? (float)xEncoder/xEncMax : x;
 
   thetaEnc = thetaEncoder;
 
   theta = fmod(thetaEnc*360.0/thetaEncMax, 360.0);
+
+  while (theta < 0) theta += 360;
+
   omega = (thetaEnc - thetaEncPrev)*360.0/thetaEncMax;
 
+  prevTime = currentTime;
   thetaEncPrev = thetaEnc;
 }
 
