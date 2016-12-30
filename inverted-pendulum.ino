@@ -29,11 +29,11 @@ Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // Initialize with encoder period and swing-up limit
-Pendulum pendulum(7200 /* counts/rev */, 100.0 /* deg */);
+Pendulum pendulum(7200 /* counts/rev */, 110.0 /* deg */);
 
 // PID control for cart position
-float kp = 2, ki = 0.001, kd = 0; // Initial/default PID gain coeffs
-PIDControl cartPid(kp, ki, kd, 0, 10); // p,i,d, initial setpoint, timestep [ms]
+float kp = 1.0, ki = 0.0005, kd = 0; // Initial/default PID gain coeffs
+PIDControl cartPid(kp, ki, kd, 0, 5); // p,i,d, initial setpoint, timestep [ms]
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
 
@@ -263,7 +263,7 @@ void loop()
   pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
 
   // If pendulum is not inverted, generate setpoint for swinging action
-  cartPid.setpoint = pendulum.swingX(0.25);
+  cartPid.setpoint = pendulum.swingX(0.5);
 
   // Compute PID output for x position
   cartPid.update(pendulum.x, millis());
@@ -284,7 +284,8 @@ void loop()
 
   // Set motor PWM value. Include a 1% output deadband to suppress jitter
   float percent_output = 100*fabs(cartPid.output);
-  dutyCycle = percent_output < 1 ? 0 : (percent_output + 10);
+  dutyCycle = percent_output < 1 ? 0 : percent_output;
+  // dutyCycle = percent_output < 1 ? 0 : (percent_output + 10);
   dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
   analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
 

@@ -48,7 +48,7 @@ float Pendulum::swingX(const float amplitude)
 
   // right, swinging left
   else if (theta > 360 - swingThetaMax && omega > 0)
-    return -amplitude*cos(theta/swingThetaMax*M_PI);
+    return -amplitude*cos((360 - theta)/swingThetaMax*M_PI);
 
   else
     return x;
