@@ -5,6 +5,7 @@ Pendulum::Pendulum(int thetaEncoderMax, float swingMaxDegrees) :
 xEnc(0),
 xEncMax(0),
 x(0),
+v(0),
 thetaEnc(0),
 thetaEncMax(thetaEncoderMax),
 theta(0),
@@ -18,6 +19,7 @@ dt(10)
 void Pendulum::update(const int xEncoder, const int thetaEncoder, unsigned long currentTime)
 {
   static unsigned long prevTime = 0;
+  static float xPrev = 0;
 
   // Return early if it's too soon for an update.
   if (currentTime - prevTime < dt)
@@ -34,10 +36,14 @@ void Pendulum::update(const int xEncoder, const int thetaEncoder, unsigned long 
 
   while (theta < 0) theta += 360;
 
+  // velocities
+  v = x - xPrev;
   omega = (thetaEnc - thetaEncPrev)*360.0/thetaEncMax;
 
+  // Store for next call
   prevTime = currentTime;
   thetaEncPrev = thetaEnc;
+  xPrev = x;
 }
 
 float Pendulum::swingX(const float amplitude)

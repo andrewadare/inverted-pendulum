@@ -275,6 +275,10 @@ void loop()
   // Update pendulum state
   pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
 
+  // Software endstops
+  if (pendulum.x > +0.85 && pendulum.v > +0.001) onRightBump();
+  if (pendulum.x < -0.85 && pendulum.v < -0.001) onLeftBump();
+
   // Compute PID output for x position
   cartPid.update(pendulum.x, millis());
 
@@ -299,8 +303,10 @@ void loop()
     printStatus(cartPid, pendulum);
   }
 
-  // Inverted pendulum control actuation is active inside 180 +/- 18 degrees
-  if (fabs(penPid.setpoint - penPid.prevInput) < 18 && fabs(pendulum.omega) < 1)
+  float thetaError = penPid.setpoint - penPid.prevInput;
+
+  // The "control" band
+  if (fabs(thetaError) <= 15 && fabs(pendulum.omega) < 1)
   {
     // Set motor direction
     digitalWrite(DIR_PIN, penPid.output > 0 ? LEFT : RIGHT);
@@ -311,11 +317,14 @@ void loop()
     dutyCycle = penPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
     analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
   }
-  else if (fabs(pendulum.omega) < 2)
-  {
-    // If pendulum is not inverted, generate setpoint for swinging action
-    cartPid.setpoint = pendulum.swingX(0.4);
 
+  // The "catch" band
+  else if ((thetaError > +15 && thetaError < +20 && pendulum.omega > 0) ||
+           (thetaError < -15 && thetaError > -20 && pendulum.omega < 0))
+  {
+    cartPid.setpoint += 0.0002 * pendulum.omega;
+
+    // TODO refactor! ---------------------------------------------------------
     // Set motor direction
     digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
 
@@ -324,6 +333,25 @@ void loop()
     dutyCycle = percent_output < 1 ? 0 : percent_output;
     dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
     analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+    // ------------------------------------------------------------------------
+  }
+
+  // The "swing" band
+  else if (fabs(pendulum.omega) < 5)
+  {
+    // If pendulum is not inverted, generate setpoint for swinging action
+    cartPid.setpoint = pendulum.swingX(0.4);
+
+    // TODO refactor! ---------------------------------------------------------
+    // Set motor direction
+    digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
+
+    // Set motor PWM value. Include a 1% output deadband to suppress jitter
+    float percent_output = 100*fabs(cartPid.output);
+    dutyCycle = percent_output < 1 ? 0 : percent_output;
+    dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
+    analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+    // ------------------------------------------------------------------------
   }
 
 }

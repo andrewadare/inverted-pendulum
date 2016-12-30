@@ -14,6 +14,7 @@ public:
   int xEnc;
   int xEncMax;
   float x;
+  float v;
   int thetaEnc;
   int thetaEncMax;
   float theta;
