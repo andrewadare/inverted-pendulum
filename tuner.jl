@@ -68,7 +68,7 @@ end
 function main()
 
     # Number of points to display
-    const N = 1000
+    const N = 500
     const address = length(ARGS) == 1 ? ARGS[1] : "/dev/cu.usbmodem2370891"
     times, setpoints, positions = collect(linspace(0,10,N)), zeros(N), zeros(N)
 
