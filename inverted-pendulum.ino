@@ -34,7 +34,7 @@ Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // Initialize with encoder period and swing-up limit.
 // Theta is positive clockwise in degrees, with theta = 0 when hanging at rest.
-Pendulum pendulum(7200 /* counts/rev */, 125.0 /* deg */);
+Pendulum pendulum(7200 /* counts/rev */, 100.0 /* deg */);
 
 // PID controllers for pendulum and cart.
 // Parameters: p,i,d, initial setpoint, timestep [ms]
@@ -318,29 +318,12 @@ void loop()
     analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
   }
 
-  // The "catch" band
-  else if ((thetaError > +15 && thetaError < +25 && pendulum.omega > 0) ||
-           (thetaError < -15 && thetaError > -25 && pendulum.omega < 0))
-  {
-    cartPid.setpoint += 0.0002 * pendulum.omega;
-
-    // TODO refactor! ---------------------------------------------------------
-    // Set motor direction
-    digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
-
-    // Set motor PWM value. Include a 1% output deadband to suppress jitter
-    float percent_output = 100*fabs(cartPid.output);
-    dutyCycle = percent_output < 1 ? 0 : percent_output;
-    dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
-    analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
-    // ------------------------------------------------------------------------
-  }
-
   // The "swing" band
   else
   {
     // If pendulum is not inverted, generate setpoint for swinging action
-    cartPid.setpoint = pendulum.swingX(0.4);
+    float amplitude = 0.6*fabs(sin(M_PI/180*pendulum.thetaHighPoint));
+    cartPid.setpoint = pendulum.swingX(amplitude);
 
     // TODO refactor! ---------------------------------------------------------
     // Set motor direction

@@ -22,6 +22,9 @@ public:
   float swingThetaMax;
   float omega;
   unsigned long dt;
+  float height;
+  float highPoint;
+  float thetaHighPoint;
 };
 
 #endif // __PENDULUM_H__
