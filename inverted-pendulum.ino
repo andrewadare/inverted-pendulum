@@ -34,11 +34,11 @@ Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // Initialize with encoder period and swing-up limit.
 // Theta is positive clockwise in degrees, with theta = 0 when hanging at rest.
-Pendulum pendulum(7200 /* counts/rev */, 120.0 /* deg */);
+Pendulum pendulum(7200 /* counts/rev */, 125.0 /* deg */);
 
 // PID controllers for pendulum and cart.
 // Parameters: p,i,d, initial setpoint, timestep [ms]
-PIDControl penPid(0.75, 0.0002, 75.0, 180.0, 10);
+PIDControl penPid(0.75, 0.002, 150.0, 180.0, 10);
 PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
 
 elapsedMillis printTimer = 0;
@@ -319,8 +319,8 @@ void loop()
   }
 
   // The "catch" band
-  else if ((thetaError > +15 && thetaError < +20 && pendulum.omega > 0) ||
-           (thetaError < -15 && thetaError > -20 && pendulum.omega < 0))
+  else if ((thetaError > +15 && thetaError < +25 && pendulum.omega > 0) ||
+           (thetaError < -15 && thetaError > -25 && pendulum.omega < 0))
   {
     cartPid.setpoint += 0.0002 * pendulum.omega;
 
@@ -337,7 +337,7 @@ void loop()
   }
 
   // The "swing" band
-  else if (fabs(pendulum.omega) < 5)
+  else
   {
     // If pendulum is not inverted, generate setpoint for swinging action
     cartPid.setpoint = pendulum.swingX(0.4);
