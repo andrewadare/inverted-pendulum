@@ -48,7 +48,6 @@ void Pendulum::update(const int xEncoder, const int thetaEncoder, unsigned long 
   // velocities
   v = x - xPrev;
   omega = alpha*(thetaEnc - thetaEncPrev)*360.0/thetaEncMax + (1 - alpha)*omegaPrev;
-  // omega = (thetaEnc - thetaEncPrev)*360.0/thetaEncMax;
 
   if ((omegaPrev >= 0 && omega < 0) || (omegaPrev <= 0 && omega > 0))
   {
