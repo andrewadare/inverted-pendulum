@@ -29,6 +29,9 @@ float maxPwm = 16383;  // 100% PWM value with 14-bit resolution
 float pwmFreq = 2929.687; // See http://www.pjrc.com/teensy/td_pulse.html
 float dutyCycle = 0;  // Percent
 
+float meanAbsError = 0; // Mean absolute error
+float alpha = 0.001; // Smoothing parameter for absolute error running average
+
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
@@ -38,7 +41,7 @@ Pendulum pendulum(7200 /* counts/rev */, 100.0 /* deg */);
 
 // PID controllers for pendulum and cart.
 // Parameters: p,i,d, initial setpoint, timestep [ms]
-PIDControl penPid(0.75, 0.002, 150.0, 180.0, 10);
+PIDControl penPid(0.75, 0.002, 150.0, 180.05, 10);
 PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
 
 elapsedMillis printTimer = 0;
@@ -305,16 +308,24 @@ void loop()
 
   float thetaError = penPid.setpoint - penPid.prevInput;
 
+  // Compute the running mean absolute theta error
+  meanAbsError = alpha*fabs(thetaError) + (1 - alpha)*meanAbsError;
+
+  // if (meanAbsError < 0.5) Serial.println(penPid.prevInput);
+
+  // Seems necessary for numerical stability (?)
+  if (meanAbsError < 1e-5) meanAbsError = 0;
+
   // The "control" band
-  if (fabs(thetaError) <= 15 && fabs(pendulum.omega) < 1)
+  if (fabs(thetaError) <= 10 && fabs(pendulum.omega) < 1)
   {
     // Set motor direction
     digitalWrite(DIR_PIN, penPid.output > 0 ? LEFT : RIGHT);
 
-    // Set motor PWM value. Include a 1% output deadband to suppress jitter
+    // Set motor PWM value. Include output deadband to suppress jitter
     float percent_output = 100*fabs(penPid.output);
-    dutyCycle = percent_output < 1 ? 0 : percent_output;
-    dutyCycle = penPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
+    dutyCycle = percent_output < 0.0 ? 0 : percent_output;
+    dutyCycle = PIDControl::clamped(dutyCycle, 0, 100); // Ensure within 0-100%
     analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
   }
 
@@ -332,7 +343,7 @@ void loop()
     // Set motor PWM value. Include a 1% output deadband to suppress jitter
     float percent_output = 100*fabs(cartPid.output);
     dutyCycle = percent_output < 1 ? 0 : percent_output;
-    dutyCycle = cartPid.clamped(dutyCycle, 0, 100); // Ensure within 0-100%
+    dutyCycle = PIDControl::clamped(dutyCycle, 0, 100); // Ensure within 0-100%
     analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
     // ------------------------------------------------------------------------
   }
