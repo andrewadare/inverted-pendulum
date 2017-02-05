@@ -4,13 +4,18 @@
 #include "Pendulum.h"
 #include "PIDControl.h"
 #include "SimpleShell.h"
+#include "Wire.h"
 
 #define LEFT HIGH
 #define RIGHT LOW
 #define TRACK_ENCODER_PIN_A 0
 #define TRACK_ENCODER_PIN_B 1
 #define PENDULUM_ENCODER_PIN_A 2
-#define PENDULUM_ENCODER_PIN_B 3
+#define AS5600_I2C_ADDR 0x36
+// Add MAGNET_OFFSET to the 12 bit sensor reading so zero is returned when the
+// pendulum is hanging at rest.
+#define MAGNET_OFFSET (4095 - 3596)
+// #define PENDULUM_ENCODER_PIN_B 3
 #define LEFT_BUMP_PIN 4
 #define RIGHT_BUMP_PIN 5
 #define PWM_PIN 10
@@ -33,11 +38,11 @@ float meanAbsError = 0; // Mean absolute error
 float alpha = 0.001; // Smoothing parameter for absolute error running average
 
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
-Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
+// Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
-// Initialize with encoder period and swing-up limit.
+// Initialize with update interval and swing-up limit.
 // Theta is positive clockwise in degrees, with theta = 0 when hanging at rest.
-Pendulum pendulum(7200 /* counts/rev */, 100.0 /* deg */);
+Pendulum pendulum(2 /* ms */, 100.0 /* deg */);
 
 // PID controllers for pendulum and cart.
 // Parameters: p,i,d, initial setpoint, timestep [ms]
@@ -46,6 +51,31 @@ PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
 
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
+
+uint8_t readByte(uint8_t device_addr, uint8_t register_addr)
+{
+  Wire.beginTransmission(device_addr);
+  Wire.write(register_addr);
+  Wire.endTransmission();
+  Wire.requestFrom((int)device_addr, 1);
+  while (Wire.available() == 0) {}
+  return Wire.read();
+}
+
+uint16_t readTwoBytes(uint8_t register_low, uint8_t register_high)
+{
+  uint8_t low = readByte(AS5600_I2C_ADDR, register_low);
+  uint16_t high = readByte(AS5600_I2C_ADDR, register_high);
+  return (high << 8) | low;
+}
+
+float readTheta()
+{
+  int reading = (readTwoBytes(0x0d, 0x0c) + MAGNET_OFFSET) % 4096;
+
+  // Convert to degrees (359/4095)
+  return reading*0.08766788766788766;
+}
 
 // Command callbacks for use by SimpleShell
 ExecStatus setPID(CommandLine *cl)
@@ -158,7 +188,7 @@ ExecStatus reset(CommandLine *cl)
   Serial.println(pendulum.xEncMax);
 
   resetTimer = 0;
-  pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
+  pendulum.update(trackEncoder.read(), readTheta(), millis());
   while (abs(pendulum.xEnc) > 2)
   {
     if (resetTimer > maxTime)
@@ -169,7 +199,7 @@ ExecStatus reset(CommandLine *cl)
     digitalWrite(DIR_PIN, pendulum.x > 0 ? LEFT : RIGHT);
     analogWrite(PWM_PIN, (pendulum.x + 0.15)*maxPwm);
     delay(10);
-    pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
+    pendulum.update(trackEncoder.read(), readTheta(), millis());
   }
 
   analogWrite(PWM_PIN, 0);
@@ -256,6 +286,7 @@ void setup()
   penPid.minOutput = -1; // Full speed left
   penPid.maxOutput = +1; // Full speed right
 
+  Wire.begin();
   Serial.begin(115200);
 
   // Don't continue until a terminal is connected. Useful for development.
@@ -276,7 +307,7 @@ void loop()
   handleCommands();
 
   // Update pendulum state
-  pendulum.update(trackEncoder.read(), thetaEncoder.read(), millis());
+  pendulum.update(trackEncoder.read(), readTheta(), millis());
 
   // Software endstops
   if (pendulum.x > +0.85 && pendulum.v > +0.001) onRightBump();

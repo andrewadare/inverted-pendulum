@@ -4,10 +4,10 @@
 class Pendulum
 {
 public:
-  Pendulum(int thetaEncoderMax, float swingMaxDegrees);
+  Pendulum(unsigned long updateInterval, float swingMaxDegrees);
   ~Pendulum() {}
 
-  void update(const int xEncoder, const int thetaEncoder, unsigned long time);
+  void update(const int xEncoder, const float thetaDeg, unsigned long time);
 
   float swingX(const float amplitude);
 
@@ -15,10 +15,7 @@ public:
   int xEncMax;
   float x;
   float v;
-  int thetaEnc;
-  int thetaEncMax;
   float theta;
-  int thetaEncPrev;
   float swingThetaMax;
   float omega;
   unsigned long dt;
