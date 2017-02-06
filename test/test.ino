@@ -1,7 +1,7 @@
 #include "Pendulum.h"
 #include "I2CCom.h"
 
-#define MAGNET_OFFSET (4095 - 3596)
+#define MAGNET_OFFSET (4096 - 3596)
 
 elapsedMillis printTimer = 0;
 unsigned int printerval = 10; // ms
@@ -36,10 +36,10 @@ void loop()
   if (printTimer >= printerval)
   {
     printTimer -= printerval;
-    // Serial.print(i2c.readTwoBytes(0x0d, 0x0c)); // Direct sensor reading
+    Serial.println(i2c.readTwoBytes(0x0d, 0x0c) + MAGNET_OFFSET); // Direct sensor reading
     // Serial.print(",");
-    Serial.print(pendulum.theta);
-    Serial.print(",");
-    Serial.println(180 + 180*pendulum.omega); // Scale + offset for visibility with pendulum inverted
+    // Serial.print(pendulum.theta);
+    // Serial.print(",");
+    // Serial.println(180 + 180*pendulum.omega); // Scale + offset for visibility with pendulum inverted
   }
 }

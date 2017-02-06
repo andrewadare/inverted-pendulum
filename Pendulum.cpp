@@ -4,14 +4,16 @@
 Pendulum::Pendulum(unsigned long updateInterval, float swingMaxDegrees) :
   xEnc(0),
   xEncMax(0),
+  xCart(0),
+  vCart(0),
   x(0),
-  v(0),
+  y(0),
+  vx(0),
+  vy(0),
   theta(0),
-  swingThetaMax(swingMaxDegrees),
   omega(0),
+  swingThetaMax(swingMaxDegrees),
   dt(updateInterval),
-  height(0),
-  highPoint(0),
   thetaHighPoint(0)
 {
 }
@@ -19,7 +21,7 @@ Pendulum::Pendulum(unsigned long updateInterval, float swingMaxDegrees) :
 void Pendulum::update(const int xEncoder, const float thetaDeg, unsigned long currentTime)
 {
   static unsigned long tPrev = 0;
-  static float xPrev = 0, thetaPrev = 0, omegaPrev = 0;
+  static float xCartPrev = 0, thetaPrev = 0, omegaPrev = 0, xPrev = 0, yPrev = 0, vyPrev = 0;
 
   // Return early if it's too soon for an update.
   if (currentTime - tPrev < dt)
@@ -27,8 +29,8 @@ void Pendulum::update(const int xEncoder, const float thetaDeg, unsigned long cu
 
   // Cart position and velocity
   xEnc = xEncoder;
-  x = xEncMax != 0 ? (float)xEncoder/xEncMax : x;
-  v = x - xPrev;
+  xCart = xEncMax != 0 ? (float)xEncoder/xEncMax : xCart;
+  vCart = xCart - xCartPrev;
 
   // Pendulum angle and instantaneous angular velocity
   theta = thetaDeg;
@@ -46,34 +48,38 @@ void Pendulum::update(const int xEncoder, const float thetaDeg, unsigned long cu
   else
     omega = (1 - 0.95)*omegaInst + 0.95*omega;
 
-  float thetaRad = M_PI/180 * (theta > 180 ? 360 - theta : theta);
-
-  height = 1 - cos(thetaRad);
+  // Coordinates of the "bob" w.r.t. the pivot in units of pendulum rod length.
+  // Note that x is chosen to be positive right / negative left
+  x = -sin(theta*M_PI/180);
+  y = 1 - cos(theta*M_PI/180);
+  vx = x - xPrev;
+  vy = y - yPrev;
 
   // Note: if trouble here, add a prevHighPoint variable and check it
-  if ((omegaPrev >= 0 && omega < 0) || (omegaPrev <= 0 && omega > 0))
-  {
-    highPoint = height;
+  // if ((x < 0 && omega > 0 && y < yPrev ) || (omegaPrev <= 0 && omega > 0))
+  if (vyPrev >= 0 && vy < 0)
     thetaHighPoint = theta;
-  }
 
   // Store for next call
   tPrev = currentTime;
-  xPrev = x;
+  xCartPrev = xCart;
   thetaPrev = theta;
   omegaPrev = omegaInst;
+  xPrev = x;
+  yPrev = y;
+  vyPrev = vy;
 }
 
 float Pendulum::swingX(const float amplitude)
 {
   // left, swinging right
-  if (theta < swingThetaMax && omega < 0)
+  if (theta < swingThetaMax && vy < 0)
     return amplitude*cos(theta/swingThetaMax*M_PI);
 
   // right, swinging left
-  else if (theta > 360 - swingThetaMax && omega > 0)
+  else if (theta > 360 - swingThetaMax && vy < 0)
     return -amplitude*cos((360 - theta)/swingThetaMax*M_PI);
 
   else
-    return x;
+    return xCart;
 }

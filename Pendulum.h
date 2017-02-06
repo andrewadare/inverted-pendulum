@@ -13,14 +13,16 @@ public:
 
   int xEnc;
   int xEncMax;
+  float xCart;
+  float vCart;
   float x;
-  float v;
+  float y;
+  float vx;
+  float vy;
   float theta;
-  float swingThetaMax;
   float omega;
+  float swingThetaMax;
   unsigned long dt;
-  float height;
-  float highPoint;
   float thetaHighPoint;
 };
 

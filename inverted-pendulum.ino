@@ -4,7 +4,7 @@
 #include "Pendulum.h"
 #include "PIDControl.h"
 #include "SimpleShell.h"
-#include "Wire.h"
+#include "I2CCom.h"
 
 #define LEFT HIGH
 #define RIGHT LOW
@@ -40,40 +40,32 @@ float alpha = 0.001; // Smoothing parameter for absolute error running average
 Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 // Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
+// For communication with AS5600 magnetic sensor ("contactless potentiometer")
+I2CCom as5600(0x36);
+
 // Initialize with update interval and swing-up limit.
 // Theta is positive clockwise in degrees, with theta = 0 when hanging at rest.
 Pendulum pendulum(2 /* ms */, 100.0 /* deg */);
 
+// Pendulum setpoint: not exactly 180 degrees due to nonlinearity of magnetic
+// sensor and (to a lesser extent) imperfect MAGNET_OFFSET calibration.
+// If the pendulum systematically drifts
+//  - to the right: decrease the setpoint angle
+//  - to the left: increase the setpoint angle
+float setPointAngle = 178.6;
+
 // PID controllers for pendulum and cart.
-// Parameters: p,i,d, initial setpoint, timestep [ms]
-PIDControl penPid(0.75, 0.002, 150.0, 180.05, 10);
+// Parameters: p,i,d, initial setpoint, update timestep [ms]
+PIDControl penPid(0.75, 0.002, 150.0, setPointAngle, 10);
 PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
 
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
 
-uint8_t readByte(uint8_t device_addr, uint8_t register_addr)
-{
-  Wire.beginTransmission(device_addr);
-  Wire.write(register_addr);
-  Wire.endTransmission();
-  Wire.requestFrom((int)device_addr, 1);
-  while (Wire.available() == 0) {}
-  return Wire.read();
-}
-
-uint16_t readTwoBytes(uint8_t register_low, uint8_t register_high)
-{
-  uint8_t low = readByte(AS5600_I2C_ADDR, register_low);
-  uint16_t high = readByte(AS5600_I2C_ADDR, register_high);
-  return (high << 8) | low;
-}
-
 float readTheta()
 {
-  int reading = (readTwoBytes(0x0d, 0x0c) + MAGNET_OFFSET) % 4096;
-
-  // Convert to degrees (359/4095)
+  // Read 12 bit measurement, compute offset, and convert to degrees (359/4095)
+  int reading = (as5600.readTwoBytes(0x0d, 0x0c) + MAGNET_OFFSET) % 4096;
   return reading*0.08766788766788766;
 }
 
@@ -196,8 +188,8 @@ ExecStatus reset(CommandLine *cl)
       Serial.println("Reset timeout");
       return FAILED;
     }
-    digitalWrite(DIR_PIN, pendulum.x > 0 ? LEFT : RIGHT);
-    analogWrite(PWM_PIN, (pendulum.x + 0.15)*maxPwm);
+    digitalWrite(DIR_PIN, pendulum.xCart > 0 ? LEFT : RIGHT);
+    analogWrite(PWM_PIN, (pendulum.xCart + 0.15)*maxPwm);
     delay(10);
     pendulum.update(trackEncoder.read(), readTheta(), millis());
   }
@@ -214,16 +206,25 @@ ExecStatus reset(CommandLine *cl)
 
 void printStatus(PIDControl &pid, Pendulum &pen)
 {
-  String s = String("{\"pid\":[") + pid.kp + "," + pid.ki + "," + pid.kd + "]"
-             + String(", \"setpoint\":") + (100*pid.setpoint)
-             + String(", \"output\":") + (100*pid.output)
-             + String(", \"pwm\":") + dutyCycle
-             + String(", \"x\":") + (100*pen.x)
-             + String(", \"theta\":") + pen.theta
-             + String(", \"omega\":") + pen.omega
-             + String(", \"time\":") + pid.prevTime
-             + "}";
-  Serial.println(s);
+  // Serial.println(i2c.readTwoBytes(0x0d, 0x0c) + MAGNET_OFFSET); // Direct sensor reading
+  // Serial.print(",");
+  Serial.print(pendulum.x);
+  Serial.print(",");
+  Serial.println(pendulum.y);
+  // Serial.print(pendulum.theta);
+  // Serial.print(",");
+  // Serial.println(180 + 180*pendulum.omega); // Scale + offset for visibility with pendulum inverted
+
+  // String s = String("{\"pid\":[") + pid.kp + "," + pid.ki + "," + pid.kd + "]"
+  //            + String(", \"setpoint\":") + (100*pid.setpoint)
+  //            + String(", \"output\":") + (100*pid.output)
+  //            + String(", \"pwm\":") + dutyCycle
+  //            + String(", \"x\":") + (100*pen.x)
+  //            + String(", \"theta\":") + pen.theta
+  //            + String(", \"omega\":") + pen.omega
+  //            + String(", \"time\":") + pid.prevTime
+  //            + "}";
+  // Serial.println(s);
 }
 
 // string -> callback "dictionary"
@@ -286,7 +287,6 @@ void setup()
   penPid.minOutput = -1; // Full speed left
   penPid.maxOutput = +1; // Full speed right
 
-  Wire.begin();
   Serial.begin(115200);
 
   // Don't continue until a terminal is connected. Useful for development.
@@ -310,11 +310,11 @@ void loop()
   pendulum.update(trackEncoder.read(), readTheta(), millis());
 
   // Software endstops
-  if (pendulum.x > +0.85 && pendulum.v > +0.001) onRightBump();
-  if (pendulum.x < -0.85 && pendulum.v < -0.001) onLeftBump();
+  if (pendulum.xCart > +0.85 && pendulum.vCart > +0.001) onRightBump();
+  if (pendulum.xCart < -0.85 && pendulum.vCart < -0.001) onLeftBump();
 
   // Compute PID output for x position
-  cartPid.update(pendulum.x, millis());
+  cartPid.update(pendulum.xCart, millis());
 
   penPid.update(pendulum.theta, millis());
 
