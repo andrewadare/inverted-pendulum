@@ -1,10 +1,9 @@
-#include <Wire.h>
+#include <i2c_t3.h>
 #include "I2CCom.h"
 
 I2CCom::I2CCom(uint8_t device_address) :
   device_addr(device_address)
 {
-  Wire.begin();
 }
 
 uint8_t I2CCom::readByte(uint8_t register_addr)

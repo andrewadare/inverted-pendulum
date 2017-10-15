@@ -1,5 +1,6 @@
 // Inverted pendulum - for Teensy 3.2
 
+#include "i2c_t3.h"
 #include "Encoder.h"
 #include "Pendulum.h"
 #include "PIDControl.h"
@@ -20,6 +21,7 @@
 #define RIGHT_BUMP_PIN 5
 #define PWM_PIN 10
 #define DIR_PIN 12
+#define LED_PIN 13
 #define CART_RESET_PIN 21
 
 // #define DEBUG 1 // Uncomment to print info for study/debugging
@@ -41,7 +43,7 @@ Encoder trackEncoder(TRACK_ENCODER_PIN_A, TRACK_ENCODER_PIN_B);
 // Encoder thetaEncoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
 
 // For communication with AS5600 magnetic sensor ("contactless potentiometer")
-I2CCom as5600(0x36);
+I2CCom as5600(AS5600_I2C_ADDR);
 
 // Initialize with update interval and swing-up limit.
 // Theta is positive clockwise in degrees, with theta = 0 when hanging at rest.
@@ -57,7 +59,8 @@ float setPointAngle = 178.6;
 // PID controllers for pendulum and cart.
 // Parameters: p,i,d, initial setpoint, update timestep [ms]
 PIDControl penPid(0.75, 0.002, 150.0, setPointAngle, 10);
-PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
+// PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
+PIDControl cartPid(3.0, 0.0005, 0, 0.0, 5);
 
 elapsedMillis printTimer = 0;
 unsigned int printerval = 50; // ms
@@ -66,7 +69,7 @@ float readTheta()
 {
   // Read 12 bit measurement, compute offset, and convert to degrees (359/4095)
   int reading = (as5600.readTwoBytes(0x0d, 0x0c) + MAGNET_OFFSET) % 4096;
-  return reading*0.08766788766788766;
+  return reading * 0.08766788766788766;
 }
 
 // Command callbacks for use by SimpleShell
@@ -80,7 +83,7 @@ ExecStatus setPID(CommandLine *cl)
   }
 
   float pidGains[3] = {0};
-  for (int i=0; i<3; i++)
+  for (int i = 0; i < 3; i++)
   {
     Serial.print(" ");
     Serial.print(cl->argv[i]);
@@ -123,10 +126,10 @@ ExecStatus setSetpoint(CommandLine *cl)
     return FAILED;
   }
 
-  cartPid.setpoint = setpoint/100;
+  cartPid.setpoint = setpoint / 100;
 
 #ifdef DEBUG
-  deltaSetpoint = setpoint/100 - cartPid.setpoint;
+  deltaSetpoint = setpoint / 100 - cartPid.setpoint;
   riseTimer = 0;
   riseTimerStarted = true;
 #endif
@@ -143,7 +146,7 @@ ExecStatus reset(CommandLine *cl)
   unsigned long maxTime = 5000;
 
   digitalWrite(DIR_PIN, LEFT);
-  analogWrite(PWM_PIN, 0.35*maxPwm);
+  analogWrite(PWM_PIN, 0.5 * maxPwm);
 
   while (true)
   {
@@ -171,7 +174,7 @@ ExecStatus reset(CommandLine *cl)
     }
     if (digitalRead(RIGHT_BUMP_PIN) == LOW)
     {
-      pendulum.xEncMax = trackEncoder.read()/2;
+      pendulum.xEncMax = trackEncoder.read() / 2;
       trackEncoder.write(pendulum.xEncMax);
       break;
     }
@@ -265,10 +268,12 @@ void handleCommands()
 
 void setup()
 {
+  pinMode(LED_PIN, OUTPUT);
+
   // Motor control pins
   analogWriteResolution(14); // bits
   analogWriteFrequency(PWM_PIN, pwmFreq);
-  analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+  analogWrite(PWM_PIN, dutyCycle / 100 * maxPwm);
   pinMode(DIR_PIN, OUTPUT);
 
   // Bump switch pins
@@ -287,13 +292,23 @@ void setup()
   penPid.minOutput = -1; // Full speed left
   penPid.maxOutput = +1; // Full speed right
 
+
   Serial.begin(115200);
 
   // Don't continue until a terminal is connected. Useful for development.
-  while (!Serial) {;}
+  while (!Serial)
+  {
+    digitalWrite(LED_PIN, HIGH);
+    delay(50);
+    digitalWrite(LED_PIN, LOW);
+    delay(200);
+  }
 
   Serial.println("Initializing...");
-  delay(1000);
+  delay(500);
+
+  Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, 400000);
+  delay(100);
 
   char cmd[] = "reset";
   shell.executeCommand(cmd);
@@ -322,7 +337,7 @@ void loop()
   // Report rise time
   if (riseTimerStarted && deltaSetpoint != 0)
   {
-    if (fabs((cartPid.setpoint - cartPid.prevInput)/deltaSetpoint) < 0.05)
+    if (fabs((cartPid.setpoint - cartPid.prevInput) / deltaSetpoint) < 0.05)
     {
       Serial.print("rise time: ");
       Serial.println(riseTimer);
@@ -340,7 +355,7 @@ void loop()
   float thetaError = penPid.setpoint - penPid.prevInput;
 
   // Compute the running mean absolute theta error
-  meanAbsError = alpha*fabs(thetaError) + (1 - alpha)*meanAbsError;
+  meanAbsError = alpha * fabs(thetaError) + (1 - alpha) * meanAbsError;
 
   // if (meanAbsError < 0.5) Serial.println(penPid.prevInput);
 
@@ -354,17 +369,17 @@ void loop()
     digitalWrite(DIR_PIN, penPid.output > 0 ? LEFT : RIGHT);
 
     // Set motor PWM value. Include output deadband to suppress jitter
-    float percent_output = 100*fabs(penPid.output);
+    float percent_output = 100 * fabs(penPid.output);
     dutyCycle = percent_output < 0.0 ? 0 : percent_output;
     dutyCycle = PIDControl::clamped(dutyCycle, 0, 100); // Ensure within 0-100%
-    analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+    analogWrite(PWM_PIN, dutyCycle / 100 * maxPwm);
   }
 
   // The "swing" band
   else
   {
     // If pendulum is not inverted, generate setpoint for swinging action
-    float amplitude = 0.6*fabs(sin(M_PI/180*pendulum.thetaHighPoint));
+    float amplitude = 0.6 * fabs(sin(M_PI / 180 * pendulum.thetaHighPoint));
     cartPid.setpoint = pendulum.swingX(amplitude);
 
     // TODO refactor! ---------------------------------------------------------
@@ -372,10 +387,10 @@ void loop()
     digitalWrite(DIR_PIN, cartPid.output < 0 ? LEFT : RIGHT);
 
     // Set motor PWM value. Include a 1% output deadband to suppress jitter
-    float percent_output = 100*fabs(cartPid.output);
+    float percent_output = 100 * fabs(cartPid.output);
     dutyCycle = percent_output < 1 ? 0 : percent_output;
     dutyCycle = PIDControl::clamped(dutyCycle, 0, 100); // Ensure within 0-100%
-    analogWrite(PWM_PIN, dutyCycle/100*maxPwm);
+    analogWrite(PWM_PIN, dutyCycle / 100 * maxPwm);
     // ------------------------------------------------------------------------
   }
 
