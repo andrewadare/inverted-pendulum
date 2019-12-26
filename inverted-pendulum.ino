@@ -54,11 +54,11 @@ Pendulum pendulum(2 /* ms */, 100.0 /* deg */);
 // If the pendulum systematically drifts
 //  - to the right: decrease the setpoint angle
 //  - to the left: increase the setpoint angle
-float setPointAngle = 178.6;
+float setPointAngle = 178.0;
 
 // PID controllers for pendulum and cart.
 // Parameters: p,i,d, initial setpoint, update timestep [ms]
-PIDControl penPid(0.75, 0.002, 150.0, setPointAngle, 10);
+PIDControl penPid(0.75, 0.005, 150.0, setPointAngle, 10);
 // PIDControl cartPid(2.0, 0.0005, 0, 0.0, 5);
 PIDControl cartPid(3.0, 0.0005, 0, 0.0, 5);
 
@@ -304,10 +304,10 @@ void setup()
     delay(200);
   }
 
-  Serial.println("Initializing...");
-  delay(500);
-
+  Serial.println("Connecting to as5600...");
   Wire.begin(I2C_MASTER, 0x00, I2C_PINS_18_19, I2C_PULLUP_EXT, 400000);
+  Serial.println("Reading initial angle");
+  Serial.println(readTheta());
   delay(100);
 
   char cmd[] = "reset";

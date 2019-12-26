@@ -10,7 +10,7 @@ gr(size=(900, 500))
 
 function readmcu(mcu::SerialPort)
     datadict = Dict()
-    msg = chomp(readuntil(mcu, '\n', 100))
+    msg = readstring(mcu)
     if startswith(msg, "{") && endswith(msg, "}")
         try
             datadict = JSON.parse(msg)
